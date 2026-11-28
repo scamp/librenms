@@ -386,17 +386,9 @@ class Port extends DeviceRelatedModel
 
     public function filterDiscards(Builder $query, mixed $value, array $config): void
     {
-        $value
-            ? $query->whereHas('statistics', $this->discardsConstraint(...))
-            : $query->whereDoesntHave('statistics', $this->discardsConstraint(...));
-    }
-
-    private function discardsConstraint(Builder $query): void
-    {
-        $query->where(function (Builder $query): void {
-            $query->where('ifInDiscards_delta', '>', 0)
-                ->orWhere('ifOutDiscards_delta', '>', 0);
-        });
+        $query->{$value ? 'whereHas' : 'whereDoesntHave'}('statistics', fn (Builder $query) => $query->where(
+            fn (Builder $query) => $query->where('ifInDiscards_delta', '>', 0)->orWhere('ifOutDiscards_delta', '>', 0)
+        ));
     }
 
     /**

@@ -90,7 +90,7 @@ class PortsController extends TableController
             'ifOutErrors',
             'ifInErrors_delta',
             'ifOutErrors_delta',
-            ...($request->boolean('filter.discards.eq') ? ['ifInDiscards_delta', 'ifOutDiscards_delta', 'ifInDiscards', 'ifOutDiscards'] : []),
+            ...($this->withDiscards($request) ? ['ifInDiscards_delta', 'ifOutDiscards_delta', 'ifInDiscards', 'ifOutDiscards'] : []),
             'ifInOctets_rate',
             'ifOutOctets_rate',
             'ifInUcastPkts_rate',
@@ -101,6 +101,11 @@ class PortsController extends TableController
             'ifSpeed',
             'ifDuplex',
         ];
+    }
+
+    private function withDiscards(Request $request): bool
+    {
+        return $request->boolean('filter.discards.eq'); // discard columns are only shown with the discards filter
     }
 
     protected function baseQuery($request): Builder
@@ -120,7 +125,7 @@ class PortsController extends TableController
             })
             ->when($request->input('ifAlias'), fn (Builder $query, $ifAlias) => $query->where('ports.ifAlias', 'like', "%$ifAlias%"))
             ->when($request->input('errors'), fn (Builder $query) => $query->hasErrors())
-            ->when($request->boolean('filter.discards.eq'), fn (Builder $query) => $query->leftJoin('ports_statistics', 'ports.port_id', 'ports_statistics.port_id'))
+            ->when($this->withDiscards($request), fn (Builder $query) => $query->leftJoin('ports_statistics', 'ports.port_id', 'ports_statistics.port_id'))
             ->when($request->input('state'), fn (Builder $query, $state) => match ($state) {
                 'down' => $query->isDown(),
                 'up' => $query->isUp(),
@@ -133,8 +138,7 @@ class PortsController extends TableController
             'hostname',
         ];
 
-        if ($request->boolean('filter.discards.eq')) {
-            // discard columns are only shown with the discards filter
+        if ($this->withDiscards($request)) {
             array_push($select, 'ports_statistics.ifInDiscards_delta', 'ports_statistics.ifOutDiscards_delta', 'ports_statistics.ifInDiscards', 'ports_statistics.ifOutDiscards');
         }
 

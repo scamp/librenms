@@ -90,10 +90,7 @@ class PortsController extends TableController
             'ifOutErrors',
             'ifInErrors_delta',
             'ifOutErrors_delta',
-            'ifInDiscards_delta',
-            'ifOutDiscards_delta',
-            'ifInDiscards',
-            'ifOutDiscards',
+            ...($request->boolean('filter.discards.eq') ? ['ifInDiscards_delta', 'ifOutDiscards_delta', 'ifInDiscards', 'ifOutDiscards'] : []),
             'ifInOctets_rate',
             'ifOutOctets_rate',
             'ifInUcastPkts_rate',
@@ -113,7 +110,6 @@ class PortsController extends TableController
         $query = Port::hasAccess($request->user())
             ->with(['device', 'device.location'])
             ->leftJoin('devices', 'ports.device_id', 'devices.device_id')
-            ->leftJoin('ports_statistics', 'ports.port_id', 'ports_statistics.port_id')
             ->when($request->array('filter'), fn ($q, $filter) => $q->applyFilters($filter))
             ->unless($request->has('filter.deleted'), fn ($q) => $q->where('ports.deleted', $request->input('deleted', 0)))
             ->when($request->input('hostname'), function (Builder $query, $hostname): void {
@@ -124,6 +120,7 @@ class PortsController extends TableController
             })
             ->when($request->input('ifAlias'), fn (Builder $query, $ifAlias) => $query->where('ports.ifAlias', 'like', "%$ifAlias%"))
             ->when($request->input('errors'), fn (Builder $query) => $query->hasErrors())
+            ->when($request->boolean('filter.discards.eq'), fn (Builder $query) => $query->leftJoin('ports_statistics', 'ports.port_id', 'ports_statistics.port_id'))
             ->when($request->input('state'), fn (Builder $query, $state) => match ($state) {
                 'down' => $query->isDown(),
                 'up' => $query->isUp(),
@@ -134,11 +131,12 @@ class PortsController extends TableController
         $select = [
             'ports.*',
             'hostname',
-            'ports_statistics.ifInDiscards_delta',
-            'ports_statistics.ifOutDiscards_delta',
-            'ports_statistics.ifInDiscards',
-            'ports_statistics.ifOutDiscards',
         ];
+
+        if ($request->boolean('filter.discards.eq')) {
+            // discard columns are only shown with the discards filter
+            array_push($select, 'ports_statistics.ifInDiscards_delta', 'ports_statistics.ifOutDiscards_delta', 'ports_statistics.ifInDiscards', 'ports_statistics.ifOutDiscards');
+        }
 
         if (array_key_exists('secondsIfLastChange', Arr::wrap($request->input('sort')))) {
             // for sorting
@@ -178,10 +176,12 @@ class PortsController extends TableController
             'ifOutErrors' => $model->ifOutErrors,
             'ifInErrors_delta' => $model->poll_period ? Number::formatSi($model->ifInErrors_delta / $model->poll_period, 2, 0, 'EPS') : '',
             'ifOutErrors_delta' => $model->poll_period ? Number::formatSi($model->ifOutErrors_delta / $model->poll_period, 2, 0, 'EPS') : '',
-            'ifInDiscards_delta' => $model->poll_period ? Number::formatSi($model->getAttribute('ifInDiscards_delta') / $model->poll_period, 2, 0, 'PPS') : '',
-            'ifOutDiscards_delta' => $model->poll_period ? Number::formatSi($model->getAttribute('ifOutDiscards_delta') / $model->poll_period, 2, 0, 'PPS') : '',
-            'ifInDiscards' => $model->getAttribute('ifInDiscards'),
-            'ifOutDiscards' => $model->getAttribute('ifOutDiscards'),
+            ...($model->hasAttribute('ifInDiscards_delta') ? [
+                'ifInDiscards_delta' => $model->poll_period ? Number::formatSi($model->getAttribute('ifInDiscards_delta') / $model->poll_period, 2, 0, 'PPS') : '',
+                'ifOutDiscards_delta' => $model->poll_period ? Number::formatSi($model->getAttribute('ifOutDiscards_delta') / $model->poll_period, 2, 0, 'PPS') : '',
+                'ifInDiscards' => $model->getAttribute('ifInDiscards'),
+                'ifOutDiscards' => $model->getAttribute('ifOutDiscards'),
+            ] : []),
             'ifType' => Rewrite::normalizeIfType($model->ifType),
             'ifAlias' => htmlentities((string) $model->ifAlias),
             'actions' => (string) view('port.actions', ['port' => $model]),

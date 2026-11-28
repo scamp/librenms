@@ -88,6 +88,23 @@ final class PortDiscardsFilterTest extends DBTestCase
         $this->assertEquals(100, $rows[1]['ifInDiscards']);
     }
 
+    public function testPortsTableOmitsDiscardsWithoutFilter(): void
+    {
+        $rows = $this->actingAs(User::factory()->admin()->create(['enabled' => true]))
+            ->postJson(route('table.ports'), [
+                'device_id' => $this->device->device_id,
+                'sort' => ['ifOutDiscards_delta' => 'desc'], // ignored without the filter
+            ])
+            ->assertOk()
+            ->json('rows');
+
+        $this->assertNotEmpty($rows);
+        foreach ($rows as $row) {
+            $this->assertArrayNotHasKey('ifInDiscards_delta', $row);
+            $this->assertArrayNotHasKey('ifOutDiscards', $row);
+        }
+    }
+
     public function testPortsPageColumnVisibility(): void
     {
         // [query, errors columns visible, discards columns visible]
